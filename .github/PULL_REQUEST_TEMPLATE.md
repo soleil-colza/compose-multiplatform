@@ -1,14 +1,14 @@
 ## Proposed Changes
 
-  -
-  -
-  -
-
 [Optional] Fixes $linkToTheIssue
 
 [Optional] Fixes "Description of the issue"
 
 [Optional] RelNote [Section\Subsection] Adds a feature
+
+  -
+  -
+  -
 
 ## Testing
 
