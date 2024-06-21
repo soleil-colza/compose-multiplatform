@@ -2,9 +2,11 @@ package org.jetbrains.compose.resources
 
 import org.gradle.api.Project
 import org.gradle.api.provider.Provider
+import org.gradle.api.tasks.TaskProvider
 import org.jetbrains.compose.ComposePlugin
 import org.jetbrains.compose.internal.IDEA_IMPORT_TASK_NAME
 import org.jetbrains.compose.internal.IdeaImportTask
+import org.jetbrains.compose.internal.utils.dependsOn
 import org.jetbrains.compose.internal.utils.uppercaseFirstChar
 import org.jetbrains.kotlin.gradle.dsl.KotlinProjectExtension
 import org.jetbrains.kotlin.gradle.plugin.KotlinSourceSet
@@ -41,9 +43,14 @@ internal fun Project.configureComposeResourcesGeneration(
     val makeAccessorsPublic = config.map { it.publicResClass }
     val packagingDir = config.getModuleResourcesDir(project)
 
+    val umbrellaTask = tasks.register("prepareComposeResources") {
+        it.group = "other"
+        it.description = "Generates Compose resources accessors and files"
+    }
+
     kotlinExtension.sourceSets.all { sourceSet ->
         if (sourceSet.name == resClassSourceSetName) {
-            configureResClassGeneration(
+            val genResTask = configureResClassGeneration(
                 sourceSet,
                 shouldGenerateCode,
                 packageName,
@@ -51,12 +58,13 @@ internal fun Project.configureComposeResourcesGeneration(
                 packagingDir,
                 generateModulePath
             )
+            umbrellaTask.dependsOn(genResTask)
         }
 
         //common resources must be converted (XML -> CVR)
         val preparedResourcesTask = registerPrepareComposeResourcesTask(sourceSet)
         val preparedResources = preparedResourcesTask.flatMap { it.outputDir.asFile }
-        configureResourceAccessorsGeneration(
+        val genAccessorsTask = configureResourceAccessorsGeneration(
             sourceSet,
             preparedResources,
             shouldGenerateCode,
@@ -65,6 +73,7 @@ internal fun Project.configureComposeResourcesGeneration(
             packagingDir,
             generateModulePath
         )
+        umbrellaTask.dependsOn(genAccessorsTask)
     }
 
     //setup task execution during IDE import
@@ -82,7 +91,7 @@ private fun Project.configureResClassGeneration(
     makeAccessorsPublic: Provider<Boolean>,
     packagingDir: Provider<File>,
     generateModulePath: Boolean
-) {
+): TaskProvider<GenerateResClassTask> {
     logger.info("Configure Res class generation for ${resClassSourceSet.name}")
 
     val genTask = tasks.register(
@@ -101,6 +110,8 @@ private fun Project.configureResClassGeneration(
 
     //register generated source set
     resClassSourceSet.kotlin.srcDir(genTask.map { it.codeDir })
+
+    return genTask
 }
 
 private fun Project.configureResourceAccessorsGeneration(
@@ -111,7 +122,7 @@ private fun Project.configureResourceAccessorsGeneration(
     makeAccessorsPublic: Provider<Boolean>,
     packagingDir: Provider<File>,
     generateModulePath: Boolean
-) {
+): TaskProvider<GenerateResourceAccessorsTask> {
     logger.info("Configure resource accessors generation for ${sourceSet.name}")
 
     val genTask = tasks.register(
@@ -132,4 +143,6 @@ private fun Project.configureResourceAccessorsGeneration(
 
     //register generated source set
     sourceSet.kotlin.srcDir(genTask.map { it.codeDir })
+
+    return genTask
 }

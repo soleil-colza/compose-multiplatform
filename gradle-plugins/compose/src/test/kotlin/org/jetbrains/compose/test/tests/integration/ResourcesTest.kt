@@ -2,15 +2,28 @@ package org.jetbrains.compose.test.tests.integration
 
 import org.gradle.util.GradleVersion
 import org.jetbrains.compose.desktop.application.internal.ComposeProperties
-import org.jetbrains.compose.internal.utils.*
+import org.jetbrains.compose.internal.utils.Arch
+import org.jetbrains.compose.internal.utils.OS
+import org.jetbrains.compose.internal.utils.currentArch
+import org.jetbrains.compose.internal.utils.currentOS
 import org.jetbrains.compose.resources.XmlValuesConverterTask
-import org.jetbrains.compose.test.utils.*
+import org.jetbrains.compose.test.utils.GradlePluginTestBase
+import org.jetbrains.compose.test.utils.TestProject
+import org.jetbrains.compose.test.utils.assertEqualTextFiles
+import org.jetbrains.compose.test.utils.assertNotEqualTextFiles
+import org.jetbrains.compose.test.utils.checkExists
+import org.jetbrains.compose.test.utils.checks
+import org.jetbrains.compose.test.utils.modify
 import org.junit.jupiter.api.Assumptions
 import org.junit.jupiter.api.Test
 import java.io.File
 import java.util.zip.ZipFile
 import kotlin.io.path.relativeTo
-import kotlin.test.*
+import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class ResourcesTest : GradlePluginTestBase() {
     @Test
@@ -34,7 +47,7 @@ class ResourcesTest : GradlePluginTestBase() {
     @Test
     fun testGeneratedAccessors(): Unit = with(testProject("misc/commonResources")) {
         //check generated resource's accessors
-        gradle("prepareKotlinIdeaImport").checks {
+        gradle("prepareComposeResources").checks {
             assertDirectoriesContentEquals(
                 file("build/generated/compose/resourceGenerator/kotlin"),
                 file("expected")
@@ -45,7 +58,7 @@ class ResourcesTest : GradlePluginTestBase() {
         file("src/commonMain/composeResources/drawable/vector_2.xml").renameTo(
             file("src/commonMain/composeResources/drawable/vector_3.xml")
         )
-        gradle("prepareKotlinIdeaImport").checks {
+        gradle("prepareComposeResources").checks {
             assertNotEqualTextFiles(
                 file("build/generated/compose/resourceGenerator/kotlin/commonMainResourceAccessors/app/group/resources_test/generated/resources/Drawable0.commonMain.kt"),
                 file("expected/commonMainResourceAccessors/app/group/resources_test/generated/resources/Drawable0.commonMain.kt")
@@ -55,7 +68,7 @@ class ResourcesTest : GradlePluginTestBase() {
         file("src/commonMain/composeResources/drawable-en").renameTo(
             file("src/commonMain/composeResources/drawable-rent")
         )
-        gradleFailure("prepareKotlinIdeaImport").checks {
+        gradleFailure("prepareComposeResources").checks {
             check.logContains(
                 """
                 contains unknown qualifier: 'rent'.
@@ -66,7 +79,7 @@ class ResourcesTest : GradlePluginTestBase() {
         file("src/commonMain/composeResources/drawable-rent").renameTo(
             file("src/commonMain/composeResources/drawable-rUS-en")
         )
-        gradleFailure("prepareKotlinIdeaImport").checks {
+        gradleFailure("prepareComposeResources").checks {
             check.logContains(
                 """
                 Region qualifier must be declared after language: 'en-rUS'.
@@ -77,7 +90,7 @@ class ResourcesTest : GradlePluginTestBase() {
         file("src/commonMain/composeResources/drawable-rUS-en").renameTo(
             file("src/commonMain/composeResources/drawable-rUS")
         )
-        gradleFailure("prepareKotlinIdeaImport").checks {
+        gradleFailure("prepareComposeResources").checks {
             check.logContains(
                 """
                 Region qualifier must be used only with language.
@@ -88,7 +101,7 @@ class ResourcesTest : GradlePluginTestBase() {
         file("src/commonMain/composeResources/drawable-rUS").renameTo(
             file("src/commonMain/composeResources/drawable-en-fr")
         )
-        gradleFailure("prepareKotlinIdeaImport").checks {
+        gradleFailure("prepareComposeResources").checks {
             check.logContains(
                 """
                 contains repetitive qualifiers: 'en' and 'fr'.
@@ -99,7 +112,7 @@ class ResourcesTest : GradlePluginTestBase() {
         file("src/commonMain/composeResources/drawable-en-fr").renameTo(
             file("src/commonMain/composeResources/image")
         )
-        gradleFailure("prepareKotlinIdeaImport").checks {
+        gradleFailure("prepareComposeResources").checks {
             check.logContains(
                 """
                 Unknown resource type: 'image'
@@ -110,7 +123,7 @@ class ResourcesTest : GradlePluginTestBase() {
         file("src/commonMain/composeResources/image").renameTo(
             file("src/commonMain/composeResources/files-de")
         )
-        gradleFailure("prepareKotlinIdeaImport").checks {
+        gradleFailure("prepareComposeResources").checks {
             check.logContains(
                 """
                 The 'files' directory doesn't support qualifiers: 'files-de'.
@@ -121,7 +134,7 @@ class ResourcesTest : GradlePluginTestBase() {
         file("src/commonMain/composeResources/files-de").renameTo(
             file("src/commonMain/composeResources/strings")
         )
-        gradleFailure("prepareKotlinIdeaImport").checks {
+        gradleFailure("prepareComposeResources").checks {
             check.logContains(
                 """
                 Unknown resource type: 'strings'.
@@ -132,7 +145,7 @@ class ResourcesTest : GradlePluginTestBase() {
         file("src/commonMain/composeResources/strings").renameTo(
             file("src/commonMain/composeResources/string-us")
         )
-        gradleFailure("prepareKotlinIdeaImport").checks {
+        gradleFailure("prepareComposeResources").checks {
             check.logContains(
                 """
                 Forbidden directory name 'string-us'! String resources should be declared in 'values/strings.xml'.
@@ -150,12 +163,12 @@ class ResourcesTest : GradlePluginTestBase() {
 
         val testXml = file("src/commonMain/composeResources/values/test.xml")
         testXml.writeText("")
-        gradleFailure("prepareKotlinIdeaImport").checks {
+        gradleFailure("prepareComposeResources").checks {
             check.logContains("${testXml.name} is not valid. Check the file content.")
         }
 
         testXml.writeText("invalid")
-        gradleFailure("prepareKotlinIdeaImport").checks {
+        gradleFailure("prepareComposeResources").checks {
             check.logContains("${testXml.name} is not valid. Check the file content.")
         }
 
@@ -166,7 +179,7 @@ class ResourcesTest : GradlePluginTestBase() {
             </resources>
         """.trimIndent()
         )
-        gradleFailure("prepareKotlinIdeaImport").checks {
+        gradleFailure("prepareComposeResources").checks {
             check.logContains("${testXml.name} is not valid. Unknown resource type: 'aaa'.")
         }
 
@@ -177,7 +190,7 @@ class ResourcesTest : GradlePluginTestBase() {
             </resources>
         """.trimIndent()
         )
-        gradleFailure("prepareKotlinIdeaImport").checks {
+        gradleFailure("prepareComposeResources").checks {
             check.logContains("${testXml.name} is not valid. Unknown string resource type: 'drawable'.")
         }
 
@@ -191,7 +204,7 @@ class ResourcesTest : GradlePluginTestBase() {
             </resources>
         """.trimIndent()
         )
-        gradleFailure("prepareKotlinIdeaImport").checks {
+        gradleFailure("prepareComposeResources").checks {
             check.logContains("${testXml.name} is not valid. Duplicated key 'v1'.")
         }
 
@@ -203,7 +216,7 @@ class ResourcesTest : GradlePluginTestBase() {
             </resources>
         """.trimIndent()
         )
-        gradleFailure("prepareKotlinIdeaImport").checks {
+        gradleFailure("prepareComposeResources").checks {
             check.logContains("${testXml.name} is not valid. Attribute 'name' not found.")
         }
         testXml.delete()
@@ -217,7 +230,7 @@ class ResourcesTest : GradlePluginTestBase() {
             """.trimIndent()
         }
 
-        gradle("prepareKotlinIdeaImport").checks {
+        gradle("prepareComposeResources").checks {
             assertDirectoriesContentEquals(
                 file("build/generated/compose/resourceGenerator/kotlin"),
                 file("expected-open-res")
