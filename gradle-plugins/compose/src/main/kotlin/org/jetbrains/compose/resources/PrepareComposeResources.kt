@@ -25,11 +25,19 @@ import javax.inject.Inject
 import javax.xml.parsers.DocumentBuilderFactory
 
 internal fun Project.registerPrepareComposeResourcesTask(
-    sourceSet: KotlinSourceSet
+    sourceSet: KotlinSourceSet,
+    config: Provider<ResourcesExtension>
 ): TaskProvider<PrepareComposeResourcesTask> {
-    val resDir = "${sourceSet.name}/$COMPOSE_RESOURCES_DIR"
-    val userComposeResourcesDir = project.projectDir.resolve("src/$resDir")
-    val preparedComposeResourcesDir = layout.buildDirectory.dir("$RES_GEN_DIR/preparedResources/$resDir")
+    val userComposeResourcesDir = config.flatMap { ext ->
+        val dirProp = objects.directoryProperty()
+        dirProp.convention(project.layout.projectDirectory.dir("src/${sourceSet.name}/$COMPOSE_RESOURCES_DIR"))
+        ext.customResourceDirectories[sourceSet.name]?.let { dirProp.set(it) }
+        dirProp
+    }
+
+    val preparedComposeResourcesDir = layout.buildDirectory.dir(
+        "$RES_GEN_DIR/preparedResources/${sourceSet.name}/$COMPOSE_RESOURCES_DIR"
+    )
 
     val convertXmlValueResources = tasks.register(
         "convertXmlValueResourcesFor${sourceSet.name.uppercaseFirstChar()}",
